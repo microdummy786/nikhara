@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/src/assets/logo.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NikharaBrief: AI Brief Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          screens: {
+            'sm': '640px',
+            'md': '800px',
+            'lg': '1024px',
+            'xl': '1260px',
+            '2xl': '1536px',
+          }
+        }
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      html, body {
+        overflow-x: hidden;
+      }
+      body {
+        position: relative;
+      }
+      
+      /* Custom checkbox styling */
+      input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #2A313A;
+        border-radius: 4px;
+        background-color: #1C232C;
+        cursor: pointer;
+        position: relative;
+        vertical-align: middle;
+        transition: all 0.2s ease;
+      }
+      
+      input[type="checkbox"]:checked {
+        background-color: #2E8BFF;
+        border-color: #2E8BFF;
+      }
+      
+      input[type="checkbox"]:checked::after {
+        content: '';
+        position: absolute;
+        left: 5px;
+        top: 2px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+      
+      /* Custom scrollbar styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: #1C232C;
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: #2A313A;
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: #2E8BFF;
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              'brand-bg-primary': '#0E141B',
+              'brand-bg-secondary': '#1C232C',
+              'brand-accent-primary': '#2E8BFF',
+              'brand-accent-secondary': '#FFB84D',
+              'brand-highlight': '#3DDC97',
+              'brand-error': '#FF5C5C',
+              'brand-text-primary': '#E9EDF2',
+              'brand-text-secondary': '#A0A8B0',
+              'brand-border': '#2A313A',
+            }
+          }
+        }
+      }
+    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^18.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^18.2.0/",
+    "react/": "https://aistudiocdn.com/react@^18.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4",
+    "url": "https://aistudiocdn.com/url@^0.11.4"
+  }
+}
+</script>
+</head>
+  <body class="bg-brand-bg-primary text-brand-text-primary">
+    <div class="absolute top-0 z-[-2] h-screen w-screen bg-brand-bg-primary bg-[radial-gradient(#2A313A_1px,transparent_1px)] [background-size:16px_16px]"></div>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

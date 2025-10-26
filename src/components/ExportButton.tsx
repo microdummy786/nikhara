@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import { Brief } from '../types';
 import { ExportIcon, ChevronDownIcon } from './Icons';
 import { BriefExportTemplate } from './BriefExportTemplate';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 
 interface ExportButtonProps {
   brief: Brief;
@@ -82,7 +82,8 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ brief }) => {
       document.body.appendChild(tempDiv);
       
       // Render the export template to the temporary div
-      ReactDOM.render(<BriefExportTemplate brief={brief} />, tempDiv);
+      const root = createRoot(tempDiv);
+      root.render(<BriefExportTemplate brief={brief} />);
       
       // Wait for the component to render
       setTimeout(() => {
@@ -131,7 +132,8 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ brief }) => {
       document.body.appendChild(tempDiv);
       
       // Render the export template to the temporary div
-      ReactDOM.render(<BriefExportTemplate brief={brief} />, tempDiv);
+      const root = createRoot(tempDiv);
+      root.render(<BriefExportTemplate brief={brief} />);
       
       // Wait for the component to render
       setTimeout(() => {

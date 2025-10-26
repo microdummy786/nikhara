@@ -1,8 +1,8 @@
 
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Brief, User } from '../types';
-import { SaveIcon, ExportIcon, CrownIcon } from './Icons';
+import { SaveIcon, ExportIcon, CrownIcon, ErrorIcon } from './Icons';
 import { ExportButton } from './ExportButton';
 
 interface BriefDisplayProps {
@@ -32,13 +32,30 @@ const InitialState: React.FC = () => (
     </div>
 );
 
-const ErrorState: React.FC<{ message: string }> = ({ message }) => (
-     <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-brand-error/10 rounded-2xl border border-brand-error/30">
-        <ErrorIcon className="w-12 h-12 text-brand-error/80 mb-4" />
-        <h2 className="text-xl font-bold text-brand-error">Generation Failed</h2>
-        <p className="mt-2 text-brand-text-secondary max-w-sm">{message}</p>
+const ErrorState: React.FC<{ message: string; countdown?: string }> = ({ message, countdown }) => {
+  const isTokenExhausted = !!countdown;
+  
+  return (
+    <div className={`flex flex-col items-center justify-center h-full text-center p-6 rounded-2xl border ${
+      isTokenExhausted 
+        ? 'bg-brand-error/15 border-brand-error/40' 
+        : 'bg-brand-error/10 border-brand-error/30'
+    }`}>
+      <ErrorIcon className="w-12 h-12 text-brand-error/90 mb-4" />
+      <h2 className={`text-xl font-bold ${isTokenExhausted ? 'text-brand-error' : 'text-brand-error'}`}>
+        {isTokenExhausted ? 'Tokens Exhausted' : 'Generation Failed'}
+      </h2>
+      <p className="mt-4 text-brand-text-secondary max-w-md leading-relaxed">{message}</p>
+      {countdown && (
+        <div className="mt-4 px-4 py-2 bg-brand-error/20 rounded-lg border border-brand-error/30">
+          <p className="text-sm text-brand-text-primary font-semibold">
+            Next reset in: <span className="text-brand-error">{countdown}</span>
+          </p>
+        </div>
+      )}
     </div>
-);
+  );
+};
 
 const renderMarkdownBold = (text: string): React.ReactNode => {
     if (!text) return null;
@@ -57,12 +74,66 @@ const renderMarkdownBold = (text: string): React.ReactNode => {
 };
 
 
+interface ParsedError {
+  message: string;
+  timeUntilReset?: { hours: number; minutes: number; seconds: number };
+  isTokenExhausted?: boolean;
+}
+
 export const BriefDisplay: React.FC<BriefDisplayProps> = ({ brief, isLoading, error, currentUser }) => {
   const isPaid = currentUser.payment === 'paid';
+  const [parsedError, setParsedError] = useState<ParsedError | null>(null);
+  const [countdown, setCountdown] = useState<string>('');
+
+  // Parse error if it's a serialized TokenExhaustedError
+  useEffect(() => {
+    if (error) {
+      try {
+        const parsed = JSON.parse(error) as ParsedError;
+        if (parsed.isTokenExhausted && parsed.timeUntilReset) {
+          setParsedError(parsed);
+          
+          // Start countdown
+          const updateCountdown = () => {
+            const { hours, minutes, seconds } = parsed.timeUntilReset!;
+            setCountdown(`${hours}h ${minutes}m ${seconds}s`);
+          };
+          
+          updateCountdown();
+          const interval = setInterval(() => {
+            // Recalculate time (approximate)
+            const timeLeft = parsed.timeUntilReset!;
+            const newSeconds = Math.max(0, timeLeft.seconds - 1);
+            const newMinutes = timeLeft.minutes + Math.floor(newSeconds / 60);
+            const newHours = timeLeft.hours + Math.floor(newMinutes / 60);
+            
+            parsed.timeUntilReset = {
+              hours: newHours,
+              minutes: newMinutes % 60,
+              seconds: newSeconds % 60
+            };
+            
+            setCountdown(`${parsed.timeUntilReset.hours}h ${parsed.timeUntilReset.minutes}m ${parsed.timeUntilReset.seconds}s`);
+          }, 1000);
+          
+          return () => clearInterval(interval);
+        } else {
+          setParsedError(null);
+        }
+      } catch {
+        setParsedError(null);
+      }
+    } else {
+      setParsedError(null);
+    }
+  }, [error]);
 
   const renderBriefContent = () => {
     if (isLoading) return <LoadingSpinner />;
-    if (error) return <ErrorState message={error} />;
+    if (error) {
+      const message = parsedError?.message || error;
+      return <ErrorState message={message} countdown={parsedError?.isTokenExhausted ? countdown : undefined} />;
+    }
     if (!brief) return <InitialState />;
 
     return (

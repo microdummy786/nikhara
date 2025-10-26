@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Footer } from './components/Footer';
 import { BriefGenerator } from './components/BriefGenerator';
@@ -15,6 +15,7 @@ import { SavedBriefsPage } from './components/SavedBriefsPage';
 import { GenerationHistoryPage } from './components/GenerationHistoryPage';
 import { NAV_ITEMS } from './constants';
 import { Logo, HamburgerMenuIcon, CrownIcon } from './components/Icons';
+import { getDailyTokens } from './services/tokenService';
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>('Home');
@@ -34,7 +35,21 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const updateUserTokens = useCallback((newTokens: number) => {
+  // Fetch tokens from database on mount and when user changes
+  useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        const tokens = await getDailyTokens(user.id === 'dev-user' ? undefined : user.id);
+        setUser(prevUser => ({ ...prevUser, tokens }));
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+      }
+    };
+    
+    fetchTokens();
+  }, [user.id, user.payment]);
+
+  const updateUserTokens = useCallback(async (newTokens: number) => {
     setUser(prevUser => ({...prevUser, tokens: newTokens}));
   }, []);
 

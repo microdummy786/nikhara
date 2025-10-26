@@ -12,7 +12,7 @@ export const UpgradeToProPage: React.FC = () => {
         <div className="mt-8 p-4 border border-brand-border/30 rounded-lg bg-brand-bg-primary/40">
           <p className="text-sm">Pro benefits will include:</p>
           <ul className="mt-3 text-sm list-disc list-inside text-left">
-            <li>Extra Tokens</li>
+            <li>150 Tokens / day</li>
             <li>Exclusive Pro Features</li>
             <li>Priority support</li>
           </ul>

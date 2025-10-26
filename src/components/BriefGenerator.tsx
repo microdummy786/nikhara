@@ -5,6 +5,8 @@ import type { Brief, User, GeneratorFormData } from '../types';
 import { BRIEF_CATEGORIES } from '../constants';
 import { CustomSelect } from './CustomSelect';
 import { generateCreativeBrief } from '../services/geminiService';
+import { saveBriefToDatabase, getPreGeneratedBrief } from '../services/briefService';
+import { deductTokens, refundTokens, getDailyTokens, getOrCreateDeviceId, TokenExhaustedError } from '../services/tokenService';
 import { CrownIcon } from './Icons';
 
 interface BriefGeneratorProps {
@@ -50,32 +52,122 @@ export const BriefGenerator: React.FC<BriefGeneratorProps> = ({ setCurrentBrief,
           setError("Please fill out Category, Niche, and Industry.");
           return;
       }
-      if (currentUser.tokens < 10) {
-          setError("Insufficient tokens. New brief generation costs 10 tokens.");
-          return;
-      }
-
+      
       setIsLoading(true);
       setError(null);
       setCurrentBrief(null);
       
-      const newTokens = currentUser.tokens - 10;
-      updateTokens(newTokens);
-      
       const deadline = deadlineValue ? `${deadlineValue} ${deadlineUnit}` : '';
-
       const formData: GeneratorFormData = { category, niche, industry, keywords, deadline };
-
+      
       try {
+          // Check and deduct tokens before generating
+          const deviceId = currentUser.id === 'dev-user' ? undefined : getOrCreateDeviceId();
+          const userId = currentUser.id !== 'dev-user' ? currentUser.id : undefined;
+          
+          const success = await deductTokens(userId, deviceId, 10);
+          
+          if (!success) {
+              setError("Insufficient tokens. New brief generation costs 10 tokens.");
+              setIsLoading(false);
+              return;
+          }
+          
+          // Update local state
+          const newTokens = currentUser.tokens - 10;
+          updateTokens(newTokens);
+          
+          // Generate brief
           const brief = await generateCreativeBrief(formData);
+          
+          // Save brief to database
+          await saveBriefToDatabase(brief, userId);
+          
           setCurrentBrief(brief);
       } catch (e: any) {
-          setError(e.message || "An unknown error occurred.");
-          updateTokens(currentUser.tokens); // Refund tokens on failure
+          // Handle token exhaustion error specially
+          if (e instanceof TokenExhaustedError) {
+              // Store error with countdown info
+              const errorWithTime = {
+                  message: e.message,
+                  timeUntilReset: e.timeUntilReset,
+                  isTokenExhausted: true
+              };
+              setError(JSON.stringify(errorWithTime));
+          } else {
+              setError(e.message || "An unknown error occurred.");
+              // Refund tokens on failure (except token exhaustion)
+              const deviceId = currentUser.id === 'dev-user' ? undefined : getOrCreateDeviceId();
+              const userId = currentUser.id !== 'dev-user' ? currentUser.id : undefined;
+              await refundTokens(userId, deviceId, 10);
+              updateTokens(currentUser.tokens);
+          }
       } finally {
           setIsLoading(false);
       }
-  }, [isFormValid, currentUser.tokens, category, niche, industry, keywords, deadlineValue, deadlineUnit, setIsLoading, setError, setCurrentBrief, updateTokens]);
+  }, [isFormValid, currentUser.tokens, category, niche, industry, keywords, deadlineValue, deadlineUnit, setIsLoading, setError, setCurrentBrief, updateTokens, currentUser.id]);
+  
+  const handleGetPreGeneratedBrief = useCallback(async () => {
+      if (!isFormValid) {
+          setError("Please fill out Category, Niche, and Industry.");
+          return;
+      }
+      
+      setIsLoading(true);
+      setError(null);
+      setCurrentBrief(null);
+      
+      const deadline = deadlineValue ? `${deadlineValue} ${deadlineUnit}` : '';
+      const formData: GeneratorFormData = { category, niche, industry, keywords, deadline };
+      
+      try {
+          // Check and deduct tokens
+          const deviceId = currentUser.id === 'dev-user' ? undefined : getOrCreateDeviceId();
+          const userId = currentUser.id !== 'dev-user' ? currentUser.id : undefined;
+          
+          const success = await deductTokens(userId, deviceId, 1);
+          
+          if (!success) {
+              setError("Insufficient tokens. Getting a pre-generated brief costs 1 token.");
+              setIsLoading(false);
+              return;
+          }
+          
+          // Update local state
+          const newTokens = currentUser.tokens - 1;
+          updateTokens(newTokens);
+          
+          // Get pre-generated brief from database
+          const brief = await getPreGeneratedBrief(formData);
+          
+          if (!brief) {
+              setError("No matching pre-generated briefs found. Try generating a new brief instead.");
+              await refundTokens(userId, deviceId, 1);
+              updateTokens(currentUser.tokens);
+          } else {
+              setCurrentBrief(brief);
+          }
+      } catch (e: any) {
+          // Handle token exhaustion error specially
+          if (e instanceof TokenExhaustedError) {
+              const errorWithTime = {
+                  message: e.message,
+                  timeUntilReset: e.timeUntilReset,
+                  isTokenExhausted: true
+              };
+              setError(JSON.stringify(errorWithTime));
+          } else {
+              setError(e.message || "An unknown error occurred.");
+              // Refund tokens on failure (except token exhaustion)
+              const deviceId = currentUser.id === 'dev-user' ? undefined : getOrCreateDeviceId();
+              const userId = currentUser.id !== 'dev-user' ? currentUser.id : undefined;
+              await refundTokens(userId, deviceId, 1);
+              updateTokens(currentUser.tokens);
+          }
+      } finally {
+          setIsLoading(false);
+      }
+  }, [isFormValid, currentUser.tokens, category, niche, industry, keywords, deadlineValue, deadlineUnit, setIsLoading, setError, setCurrentBrief, updateTokens, currentUser.id]);
 
   const renderKeywords = () => {
     const keywordData = availableOptions.keywords;
@@ -185,10 +277,14 @@ export const BriefGenerator: React.FC<BriefGeneratorProps> = ({ setCurrentBrief,
             Generate Brief - 10 tokens
           </button>
           <button 
+            onClick={handleGetPreGeneratedBrief}
             disabled={!isFormValid}
-            className="w-full border border-brand-border text-brand-text-secondary font-semibold py-3 px-4 rounded-xl hover:bg-brand-border hover:text-brand-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full border border-brand-border text-brand-text-secondary font-semibold py-3 px-4 rounded-xl hover:bg-brand-border hover:text-brand-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center relative group"
           >
             Get Pre-Generated Brief - 1 token
+            <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-brand-bg-secondary/95 text-brand-text-primary text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+              These briefs may have already been used.
+            </span>
           </button>
           <button 
             onClick={onShowGenerationHistory}

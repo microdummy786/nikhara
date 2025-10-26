@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
+    css: {
+      postcss: './postcss.config.cjs',
+    },
     resolve: {
       alias: {
         // Fix: `__dirname` is not available in ES modules. `import.meta.url` provides the modern, standard way to reference the current file's path.
@@ -18,9 +21,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Securely expose only the GEMINI_API_KEY to the client-side code, not the entire process.env object.
-      // Vite performs a static replacement, so we stringify the value.
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      // Securely expose only the required API keys to the client-side code
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY)
     }
   }
 })

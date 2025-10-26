@@ -1,9 +1,6 @@
 
 import type { GeneratorFormData, Brief } from '../types';
-
-// Check for the API key in .env.local
-const apiKey = process.env.GEMINI_API_KEY;
-console.log("API Key available:", !!apiKey); // Debug log
+import { supabase } from '../lib/supabase';
 
 // Define model priority order - faster models first
 const MODELS = [
@@ -15,74 +12,98 @@ const MODELS = [
   'gemini-2.5-pro',
 ];
 
-// Direct API call function
-const generateWithGemini = async (model: string, prompt: string) => {
+// Call secure Edge Function instead of Gemini API directly
+const generateWithGemini = async (model: string, prompt: string): Promise<string> => {
   try {
-    console.log(`Making API request to model: ${model}`);
-    
-    // Use a simpler model name format
-    const actualModel = model.includes('gemini-') ? model : `gemini-${model}`;
-    
-    const url = `https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`;
-    
-    console.log(`API URL: ${url.split('?')[0]}`); // Log URL without API key
-    
-    // Add timeout to prevent long-running requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 800, // Reduced from 1024 for faster generation
+    // Try to use secure Edge Function first
+    try {
+      
+      const { data, error } = await supabase.functions.invoke('generate-brief', {
+        body: {
+          prompt: prompt,
+          model: model
         }
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log(`API Response status: ${response.status}`);
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error(`API Error Response:`, errorData);
-      throw new Error(`API Error (${response.status}): ${errorData.error?.message || response.statusText}`);
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (!data?.text) {
+        console.error("Empty text in response:", data);
+        throw new Error("API returned empty content");
+      }
+      
+      return data.text;
+    } catch (edgeFunctionError) {
+      // Will fall through to direct API call below
     }
+    
+    // Fallback: Check if we have API key (legacy/development mode)  
+    // @ts-ignore - Vite environment variable
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (apiKey) {
+      
+      // Use a simpler model name format
+      const actualModel = model.includes('gemini-') ? model : `gemini-${model}`;
+      
+      const url = `https://generativelanguage.googleapis.com/v1/models/${actualModel}:generateContent?key=${apiKey}`;
+      
+      // Add timeout to prevent long-running requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 800,
+          }
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API Error (${response.status}): ${errorData.error?.message || response.statusText}`);
+      }
 
-    const data = await response.json();
-    console.log(`API Response received, has candidates:`, !!data.candidates);
-    
-    // Check if we have valid response data
-    if (!data.candidates || data.candidates.length === 0) {
-      console.error("No candidates in response:", data);
-      throw new Error("API returned no content");
+      const data = await response.json();
+      
+      // Check if we have valid response data
+      if (!data.candidates || data.candidates.length === 0) {
+        throw new Error("API returned no content");
+      }
+      
+      const text = data.candidates[0]?.content?.parts?.[0]?.text || '';
+      
+      if (!text) {
+        throw new Error("API returned empty content");
+      }
+      
+      return text;
     }
     
-    const text = data.candidates[0]?.content?.parts?.[0]?.text || '';
+    // No valid configuration
+    throw new Error("No API configuration found. Please set up Edge Function or API key.");
     
-    if (!text) {
-      console.error("Empty text in response:", data.candidates[0]);
-      throw new Error("API returned empty content");
-    }
-    
-    return text;
   } catch (error) {
     console.error(`Error in generateWithGemini for model ${model}:`, error);
     throw error;
@@ -169,12 +190,13 @@ export const generateCreativeBrief = async (formData: GeneratorFormData): Promis
         Deadline: [The determined or provided deadline, e.g., "3 Weeks", "1 Month"]
     `;
 
-    // Check if API key is available
-    console.log("Using API key for generation:", !!apiKey);
+    // Check if we have API configuration
+    // @ts-ignore - Vite environment variable
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const hasEdgeFunction = true; // Edge Function is always checked first
     
-    // Only use mock if API key is explicitly missing
-    if (!apiKey) {
-        console.log("No API key found, using mock response");
+    // Only use mock if no configuration found
+    if (!apiKey && !hasEdgeFunction) {
         await new Promise(res => setTimeout(res, 1500)); // Simulate network delay
         const mockText = `
             Company Name: Quantum Weavers
@@ -203,29 +225,25 @@ export const generateCreativeBrief = async (formData: GeneratorFormData): Promis
         
         for (const model of MODELS) {
             try {
-                console.log(`Attempting to generate brief with model: ${model}`);
-                
                 text = await generateWithGemini(model, prompt);
                 
                 if (text) {
-                    console.log(`Successfully generated brief with model: ${model}`);
                     break; // Exit the loop if we got a successful response
                 }
             } catch (error) {
-                console.warn(`Model ${model} failed:`, error);
                 lastError = error;
                 // Continue to the next model
             }
         }
         
         if (!text) {
-          throw new Error("All models failed to generate content. Last error: " + (lastError?.message || "Unknown error"));
+          const errorMsg = lastError instanceof Error ? lastError.message : String(lastError);
+          throw new Error("All models failed to generate content. Last error: " + errorMsg);
         }
 
         const parsed = parseBriefText(text);
         
         if (!parsed.companyName || !parsed.companyDescription || !parsed.projectDescription) {
-            console.error("Failed to parse brief from AI response:", { text, parsed });
             throw new Error("Failed to parse the brief from AI response. It may be incomplete or in an unexpected format.");
         }
 
@@ -242,7 +260,6 @@ export const generateCreativeBrief = async (formData: GeneratorFormData): Promis
         };
 
     } catch (error) {
-        console.error("Error generating brief:", error);
         if (error instanceof Error) {
             throw error;
         }
